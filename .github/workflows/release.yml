@@ -16,11 +16,27 @@ jobs:
       - name: Build
         run: |
           mkdir -p dist
-          GOOS=darwin GOARCH=arm64 go build -o dist/scribe-darwin-arm64 ./cmd/scribe
-          GOOS=darwin GOARCH=amd64 go build -o dist/scribe-darwin-amd64 ./cmd/scribe
-          GOOS=linux GOARCH=amd64 go build -o dist/scribe-linux-amd64 ./cmd/scribe
-          GOOS=linux GOARCH=arm64 go build -o dist/scribe-linux-arm64 ./cmd/scribe
-          GOOS=windows GOARCH=amd64 go build -o dist/scribe-windows-amd64.exe ./cmd/scribe
+          VERSION=${GITHUB_REF_NAME}
+          VERSION=${VERSION#v}
+          GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o dist/scribe_${VERSION}_darwin_arm64 ./cmd/scribe
+          GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o dist/scribe_${VERSION}_darwin_amd64 ./cmd/scribe
+          GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o dist/scribe_${VERSION}_linux_amd64 ./cmd/scribe
+          GOOS=linux GOARCH=arm64 go build -ldflags "-s -w" -o dist/scribe_${VERSION}_linux_arm64 ./cmd/scribe
+          GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o dist/scribe_${VERSION}_windows_amd64.exe ./cmd/scribe
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+      - name: Cosign sign (optional)
+        if: env.COSIGN_KEY != ''
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
+        run: |
+          for f in dist/*; do
+            cosign sign-blob --yes --key "$COSIGN_KEY" "$f" > "$f.sig"
+          done
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -37,7 +53,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: |
+            dist/*
+            dist/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
