@@ -1,0 +1,12 @@
+bin/
+.DS_Store
+dist/
+coverage.out
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.log
+
