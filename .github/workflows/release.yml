@@ -10,13 +10,25 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
+    env:
+      VERSION_REF: ${{ github.ref_name }}
+      INPUT_TAG: ${{ inputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+      - name: Compute version
+        id: ver
+        run: |
+          VERSION=${VERSION_REF}
+          if [ -z "$VERSION" ] && [ -n "$INPUT_TAG" ]; then VERSION="$INPUT_TAG"; fi
+          if [ -z "$VERSION" ]; then echo "::error::No tag provided (use push tag or workflow input)"; exit 1; fi
+          echo "version_tag=$VERSION" >> $GITHUB_OUTPUT
+          VERSION_NO_V=${VERSION#v}
+          echo "version_no_v=$VERSION_NO_V" >> $GITHUB_OUTPUT
       - name: Build
         run: |
           mkdir -p dist
@@ -41,25 +53,15 @@ jobs:
           for f in dist/*; do
             cosign sign-blob --yes --key "$COSIGN_KEY" "$f" > "$f.sig"
           done
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: scribe-binaries
-          path: dist/*
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: scribe-binaries
-          path: dist
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/*
-            dist/checksums.txt
+          tag_name: ${{ steps.ver.outputs.version_tag }}
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
